@@ -32,6 +32,12 @@ public class TrackingService {
 
     public void unsubscribeAll(WebSocketSession session) {
         subscribers.values().forEach(set -> set.remove(session));
+        subscribers.values().removeIf(Set::isEmpty);
+    }
+
+    public void closeOrder(String orderId) {
+        lastLocations.remove(orderId);
+        subscribers.remove(orderId);
     }
 
     public void publish(LocationUpdate update) {
