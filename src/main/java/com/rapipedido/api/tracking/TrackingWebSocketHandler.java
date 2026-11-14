@@ -23,23 +23,49 @@ public class TrackingWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        JsonNode json = mapper.readTree(message.getPayload());
+        JsonNode json;
+        try {
+            json = mapper.readTree(message.getPayload());
+        } catch (Exception e) {
+            reply(session, "INVALID_JSON", "El mensaje no es un JSON válido");
+            return;
+        }
 
         if (json.has("action")) {
-            // Es un cliente que quiere suscribirse
-            String orderId = json.get("orderId").asText();
+            String orderId = json.path("orderId").asText("");
+            if (orderId.isBlank()) {
+                reply(session, "INVALID_ORDER", "Falta el orderId");
+                return;
+            }
             trackingService.subscribe(orderId, session);
-        } else {
-            // Es el repartidor enviando su ubicación
-            LocationUpdate update = new LocationUpdate(
-                    json.get("deliveryPersonId").asText(),
-                    json.get("orderId").asText(),
-                    json.get("latitude").asDouble(),
-                    json.get("longitude").asDouble(),
-                    Instant.parse(json.get("timestamp").asText())
-            );
-            trackingService.publish(update);
+            return;
         }
+
+        String orderId = json.path("orderId").asText("");
+        String driverId = json.path("deliveryPersonId").asText("");
+        if (orderId.isBlank() || driverId.isBlank()
+                || !json.has("latitude") || !json.has("longitude")) {
+            reply(session, "INVALID_LOCATION", "Faltan campos obligatorios");
+            return;
+        }
+
+        double lat = json.get("latitude").asDouble();
+        double lon = json.get("longitude").asDouble();
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+            reply(session, "INVALID_COORDINATES", "Coordenadas fuera de rango");
+            return;
+        }
+
+        Instant ts = json.hasNonNull("timestamp")
+                ? Instant.parse(json.get("timestamp").asText())
+                : Instant.now();
+
+        trackingService.publish(new LocationUpdate(driverId, orderId, lat, lon, ts));
+    }
+
+    private void reply(WebSocketSession session, String code, String msg) throws Exception {
+        session.sendMessage(new TextMessage(
+                "{\"status\":\"ERROR\",\"errorCode\":\"" + code + "\",\"message\":\"" + msg + "\"}"));
     }
 
     @Override
