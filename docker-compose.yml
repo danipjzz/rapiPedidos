@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: rapipedido-db
+    environment:
+      POSTGRES_DB: rapipedido
+      POSTGRES_USER: rapipedido
+      POSTGRES_PASSWORD: rapipedido
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

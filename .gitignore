@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# macOS
+.DS_Store
+
+# Secretos y configuración local (nunca subir claves)
+.env
+application-local.properties
