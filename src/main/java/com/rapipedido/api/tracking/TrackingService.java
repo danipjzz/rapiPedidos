@@ -3,12 +3,16 @@ package com.rapipedido.api.tracking;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
+
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.WebSocketSession;
 import java.io.IOException;
 import java.util.Locale;
 import org.springframework.web.socket.TextMessage;
+
+
 
 @Service
 public class TrackingService {
@@ -53,6 +57,10 @@ public class TrackingService {
         // 3. Convertimos la ubicación a JSON y la enviamos a cada uno
         String json = toJson(update);
         sessions.forEach(session -> send(session, json));
+    }
+
+    public Optional<LocationUpdate> getLastLocation(String orderId) {
+        return Optional.ofNullable(lastLocations.get(orderId));
     }
 
     private void send(WebSocketSession session, String json) {
