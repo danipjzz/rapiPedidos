@@ -31,4 +31,14 @@ public class OrderController {
         body.put("message", exception.getMessage());
         return ResponseEntity.badRequest().body(body);
     }
+    @PatchMapping("/{orderId}/status")
+    public ResponseEntity<Map<String, Object>> updateStatus(
+            @PathVariable String orderId, @RequestBody Map<String, String> request) {
+        OrderResponse data = orderService.updateStatus(orderId, request.get("status"));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "SUCCESS");
+        body.put("message", "Estado actualizado");
+        body.put("data", data);
+        return ResponseEntity.ok(body);
+    }
 }

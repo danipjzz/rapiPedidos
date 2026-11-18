@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RapiPedido · Vista del cliente</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <style>
+        :root { --bg:#f5f5f4; --card:#fff; --text:#1c1917; --muted:#78716c; --border:#e7e5e4; --accent:#e8590c; --ok:#2f9e44; --err:#e03131; }
+        @media (prefers-color-scheme: dark) { :root { --bg:#1c1917; --card:#292524; --text:#fafaf9; --muted:#a8a29e; --border:#44403c; } }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+        header { padding:14px 24px; background:var(--card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+        header h1 { margin:0; font-size:18px; }
+        header p { margin:2px 0 0; font-size:12px; color:var(--muted); }
+        nav a { font-size:13px; color:var(--accent); text-decoration:none; margin-left:14px; }
+        nav a.on { font-weight:700; text-decoration:underline; }
+        #current { font-size:13px; padding:6px 12px; border-radius:20px; border:1px solid var(--border); }
+        main { display:grid; grid-template-columns:minmax(320px,430px) 1fr; gap:16px; padding:16px; max-width:1300px; margin:0 auto; }
+        @media (max-width:900px) { main { grid-template-columns:1fr; } }
+        .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+        .card h2 { margin:0 0 10px; font-size:14px; display:flex; align-items:center; gap:8px; }
+        .num { background:var(--accent); color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+        .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); display:inline-block; }
+        .dot.on { background:var(--ok); }
+        label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+        input, select { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
+        .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+        button { flex:1; padding:8px 10px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-size:13px; cursor:pointer; min-width:110px; }
+        button.sec { background:transparent; color:var(--text); border:1px solid var(--border); }
+        button:disabled { opacity:.4; cursor:not-allowed; }
+        .dish { display:grid; grid-template-columns:1fr 64px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+        .dish small { color:var(--muted); display:block; }
+        .hint { font-size:12px; color:var(--muted); margin:8px 0 0; }
+        #map { height:380px; border-radius:10px; border:1px solid var(--border); margin-bottom:14px; }
+        .item { padding:7px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+        .item b { font-size:12px; color:var(--accent); display:block; }
+        .item small { color:var(--muted); }
+        #log { max-height:260px; overflow-y:auto; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; }
+        #log .entry { padding:5px 0; border-bottom:1px dashed var(--border); }
+        #log .ok { color:var(--ok); } #log .err { color:var(--err); } #log .ws { color:var(--accent); }
+        #log pre { margin:3px 0 0; white-space:pre-wrap; word-break:break-all; color:var(--muted); }
+        .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        @media (max-width:1100px) { .two { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<header>
+    <div><h1>RapiPedido · Vista del cliente</h1><p>Pide, paga y sigue tu pedido en tiempo real</p></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div id="current">Sin pedido activo</div><nav><a href="cliente.html" class="on">Vista cliente</a><a href="repartidor.html">Vista repartidor</a></nav></div>
+</header>
+
+<main>
+    <aside>
+        <section class="card">
+            <h2><span class="num">1</span> Catálogo</h2>
+            <label for="clientId">ID del cliente</label>
+            <input id="clientId" value="usr_998877">
+            <label for="restaurantId">Restaurante</label>
+            <input id="restaurantId" type="number" value="1" min="1">
+            <div class="row"><button id="btnMenu">Cargar menú</button></div>
+            <div id="menu"></div>
+        </section>
+        <section class="card">
+            <h2><span class="num">2</span> Pedido</h2>
+            <label for="address">Dirección de entrega</label>
+            <input id="address" value="Calle Falsa 123, Bogotá">
+            <label for="payMethod">Método de pago</label>
+            <select id="payMethod"><option>CREDIT_CARD</option><option>DEBIT_CARD</option><option>CASH</option></select>
+            <div class="row"><button id="btnOrder" disabled>Crear pedido</button></div>
+            <p class="hint">Primero carga el menú y elige cantidades. Al crear el pedido, empieza el seguimiento automáticamente.</p>
+        </section>
+        <section class="card">
+            <h2><span class="num">3</span> Pago</h2>
+            <div class="row" style="margin-top:0"><button id="btnPay" disabled>Pagar pedido</button></div>
+        </section>
+        <section class="card">
+            <h2><span class="num">4</span> Seguimiento <span class="dot" id="clientDot"></span></h2>
+            <label for="followId">ID del pedido a seguir</label>
+            <input id="followId" placeholder="ord_...">
+            <div class="row">
+                <button id="clientSub">Seguir pedido</button>
+                <button id="clientStop" class="sec" disabled>Desconectar</button>
+            </div>
+            <p class="hint">El mapa muestra la ubicación que envía el repartidor en tiempo real.</p>
+        </section>
+        <section class="card">
+            <h2><span class="num">5</span> Soporte</h2>
+            <label for="ticketSubject">Asunto</label>
+            <input id="ticketSubject" value="Demora en la entrega">
+            <label for="ticketDesc">Descripción</label>
+            <input id="ticketDesc" value="El pedido tarda más de lo esperado">
+            <div class="row"><button id="btnTicket">Crear ticket</button></div>
+        </section>
+    </aside>
+    <section>
+        <div id="map"></div>
+        <div class="two">
+            <div class="card">
+                <h2>Notificaciones <span class="hint" style="margin:0 0 0 auto">se actualizan solas</span></h2>
+                <div id="notifs"><p class="hint">Aún no hay notificaciones.</p></div>
+            </div>
+            <div class="card">
+                <h2>Mis tickets</h2>
+                <div id="tickets"><p class="hint">Aún no hay tickets.</p></div>
+            </div>
+        </div>
+        <div class="card"><h2>Registro de peticiones</h2><div id="log"></div></div>
+    </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+
+    const $ = id => document.getElementById(id);
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+    const money = n => '$' + Number(n).toLocaleString('es-CO');
+
+    function log(kind, title, payload) {
+        const d = el('div', 'entry');
+        d.appendChild(el('span', kind, new Date().toLocaleTimeString() + '  ' + title));
+        if (payload !== undefined && payload !== null && payload !== '') {
+            let s = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+            if (s.length > 1200) s = s.slice(0, 1200) + '…';
+            d.appendChild(el('pre', null, s));
+        }
+        $('log').prepend(d);
+    }
+
+    async function api(method, url, body, quiet) {
+        const opt = { method, headers: {} };
+        if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+        let res;
+        try { res = await fetch(url, opt); }
+        catch (e) { if (!quiet) log('err', method + ' ' + url + ' → sin conexión con el servidor'); return null; }
+        const text = await res.text();
+        let json = null;
+        try { json = JSON.parse(text); } catch (e) {}
+        if (!quiet || !res.ok) log(res.ok ? 'ok' : 'err', method + ' ' + url + ' → ' + res.status, json || text);
+        return { ok: res.ok, status: res.status, json };
+    }
+
+    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/tracking';
+    const START = { lat: 4.60971, lng: -74.08175 }; // solo centra el mapa al abrir
+    const map = L.map('map').setView([START.lat, START.lng], 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+
+    const state = { orderId: null, total: 0, menu: [], notifTimer: null };
+
+    function setOrder(id, total) {
+        state.orderId = id; state.total = total;
+        $('current').textContent = 'Pedido: ' + id + ' · ' + money(total);
+        $('btnPay').disabled = false;
+        $('followId').value = id;
+        store('rapi_order', id);
+        if (!state.notifTimer) state.notifTimer = setInterval(() => loadNotifs(true), 5000);
+    }
+
+    // ---------- Catálogo ----------
+    $('btnMenu').onclick = async () => {
+        const r = await api('GET', '/api/catalog/restaurants/' + encodeURIComponent($('restaurantId').value) + '/menu');
+        if (!r || !r.ok) return;
+        state.menu = r.json.data || [];
+        const box = $('menu'); box.replaceChildren();
+        if (!state.menu.length) { box.appendChild(el('p', 'hint', 'Este restaurante no tiene platos.')); return; }
+        state.menu.forEach(d => {
+            const row = el('div', 'dish');
+            const info = el('div');
+            info.appendChild(document.createTextNode(d.name + ' · ' + money(d.price)));
+            info.appendChild(el('small', null, d.description + (d.available ? '' : ' (no disponible)')));
+            const q = el('input'); q.type = 'number'; q.min = 0; q.max = 20; q.value = 0; q.disabled = !d.available;
+            q.dataset.dishId = d.dishId; q.className = 'qty';
+            row.appendChild(info); row.appendChild(q); box.appendChild(row);
+        });
+        $('btnOrder').disabled = false;
+    };
+
+    // ---------- Pedido ----------
+    $('btnOrder').onclick = async () => {
+        const items = [...document.querySelectorAll('.qty')].filter(q => +q.value > 0).map(q => {
+            const dish = state.menu.find(d => String(d.dishId) === q.dataset.dishId);
+            return { dishId: dish.dishId, quantity: +q.value, unitPrice: dish.price };
+        });
+        if (!items.length) { log('err', 'Elige al menos un plato con cantidad mayor a 0'); return; }
+        const r = await api('POST', '/api/orders', {
+            clientId: $('clientId').value.trim(), restaurantId: +$('restaurantId').value,
+            deliveryAddress: $('address').value.trim(), paymentMethod: $('payMethod').value, items
+        });
+        if (r && r.ok) { setOrder(r.json.data.orderId, r.json.data.totalAmount); follow(); loadNotifs(); }
+    };
+
+    // ---------- Pago ----------
+    $('btnPay').onclick = async () => {
+        await api('POST', '/api/payments/process', { orderId: state.orderId, amount: state.total, paymentMethod: $('payMethod').value });
+        loadNotifs();
+    };
+
+    // ---------- Notificaciones ----------
+    async function loadNotifs(quiet) {
+        const r = await api('GET', '/api/notifications/user/' + encodeURIComponent($('clientId').value.trim()), undefined, quiet);
+        const list = (r && r.json && r.json.data) || [];
+        const box = $('notifs'); box.replaceChildren();
+        if (!list.length) { box.appendChild(el('p', 'hint', 'Aún no hay notificaciones.')); return; }
+        list.forEach(n => {
+            const it = el('div', 'item');
+            it.appendChild(el('b', null, n.type));
+            it.appendChild(document.createTextNode(n.message));
+            it.appendChild(el('small', null, ' · ' + new Date(n.createdAt).toLocaleTimeString()));
+            box.appendChild(it);
+        });
+    }
+
+    // ---------- Soporte ----------
+    let myTickets = [];
+    $('btnTicket').onclick = async () => {
+        const r = await api('POST', '/api/admin/support-tickets', {
+            userId: $('clientId').value.trim(), orderId: state.orderId,
+            subject: $('ticketSubject').value.trim(), description: $('ticketDesc').value.trim()
+        });
+        if (r && r.ok && r.json.data) { myTickets.unshift(r.json.data); renderTickets(); }
+    };
+    function renderTickets() {
+        const box = $('tickets'); box.replaceChildren();
+        myTickets.forEach(t => {
+            const it = el('div', 'item');
+            it.appendChild(el('b', null, t.ticketId + ' · ' + t.ticketStatus));
+            it.appendChild(document.createTextNode(t.subject));
+            box.appendChild(it);
+        });
+    }
+
+    // ---------- Seguimiento ----------
+    let marker = null;
+    const trail = L.polyline([], { color: '#e8590c', weight: 4 }).addTo(map);
+    let clientWs = null;
+
+    function follow() {
+        const id = $('followId').value.trim();
+        if (!id) { log('err', 'Escribe el ID del pedido a seguir'); return; }
+        if (clientWs) stopClient();
+        trail.setLatLngs([]);
+        if (marker) { map.removeLayer(marker); marker = null; }
+        clientWs = new WebSocket(WS_URL);
+        clientWs.onopen = () => {
+            $('clientDot').classList.add('on'); $('clientSub').disabled = true; $('clientStop').disabled = false;
+            const msg = JSON.stringify({ action: 'SUBSCRIBE', orderId: id });
+            clientWs.send(msg); log('ws', '→ suscripción al pedido', msg);
+        };
+        clientWs.onmessage = e => {
+            let d; try { d = JSON.parse(e.data); } catch (x) { log('err', e.data); return; }
+            if (d.status === 'ERROR') { log('err', d.errorCode + ': ' + d.message); return; }
+            log('ws', '← ubicación del repartidor', e.data);
+            if (typeof d.latitude === 'number') {
+                const ll = [d.latitude, d.longitude];
+                if (!marker) marker = L.marker(ll).addTo(map); else marker.setLatLng(ll);
+                trail.addLatLng(ll); map.panTo(ll);
+            }
+        };
+        clientWs.onclose = stopClient;
+        clientWs.onerror = () => log('err', 'no se pudo conectar al seguimiento');
+    }
+    function stopClient() {
+        const ws = clientWs; clientWs = null;
+        if (ws) ws.close();
+        $('clientDot').classList.remove('on'); $('clientSub').disabled = false; $('clientStop').disabled = true;
+    }
+    $('clientSub').onclick = follow;
+    $('clientStop').onclick = stopClient;
+
+    // Si se abrió el pedido desde otra pestaña de este navegador
+    const saved = store('rapi_order'); if (saved) $('followId').value = saved;
+
+</script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RapiPedido · Vista del repartidor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <style>
+        :root { --bg:#f5f5f4; --card:#fff; --text:#1c1917; --muted:#78716c; --border:#e7e5e4; --accent:#e8590c; --ok:#2f9e44; --err:#e03131; }
+        @media (prefers-color-scheme: dark) { :root { --bg:#1c1917; --card:#292524; --text:#fafaf9; --muted:#a8a29e; --border:#44403c; } }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+        header { padding:14px 24px; background:var(--card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+        header h1 { margin:0; font-size:18px; }
+        header p { margin:2px 0 0; font-size:12px; color:var(--muted); }
+        nav a { font-size:13px; color:var(--accent); text-decoration:none; margin-left:14px; }
+        nav a.on { font-weight:700; text-decoration:underline; }
+        #current { font-size:13px; padding:6px 12px; border-radius:20px; border:1px solid var(--border); }
+        main { display:grid; grid-template-columns:minmax(320px,430px) 1fr; gap:16px; padding:16px; max-width:1300px; margin:0 auto; }
+        @media (max-width:900px) { main { grid-template-columns:1fr; } }
+        .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+        .card h2 { margin:0 0 10px; font-size:14px; display:flex; align-items:center; gap:8px; }
+        .num { background:var(--accent); color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+        .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); display:inline-block; }
+        .dot.on { background:var(--ok); }
+        label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+        input, select { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:14px; }
+        .row { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+        button { flex:1; padding:8px 10px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-size:13px; cursor:pointer; min-width:110px; }
+        button.sec { background:transparent; color:var(--text); border:1px solid var(--border); }
+        button:disabled { opacity:.4; cursor:not-allowed; }
+        .dish { display:grid; grid-template-columns:1fr 64px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+        .dish small { color:var(--muted); display:block; }
+        .hint { font-size:12px; color:var(--muted); margin:8px 0 0; }
+        #map { height:380px; border-radius:10px; border:1px solid var(--border); margin-bottom:14px; }
+        .item { padding:7px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+        .item b { font-size:12px; color:var(--accent); display:block; }
+        .item small { color:var(--muted); }
+        #log { max-height:260px; overflow-y:auto; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; }
+        #log .entry { padding:5px 0; border-bottom:1px dashed var(--border); }
+        #log .ok { color:var(--ok); } #log .err { color:var(--err); } #log .ws { color:var(--accent); }
+        #log pre { margin:3px 0 0; white-space:pre-wrap; word-break:break-all; color:var(--muted); }
+        .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        @media (max-width:1100px) { .two { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<header>
+    <div><h1>RapiPedido · Vista del repartidor</h1><p>Comparte tu ubicación y confirma la entrega</p></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div id="current">Sin pedido activo</div><nav><a href="cliente.html">Vista cliente</a><a href="repartidor.html" class="on">Vista repartidor</a></nav></div>
+</header>
+
+<main>
+    <aside>
+        <section class="card">
+            <h2><span class="num">1</span> Entrega asignada</h2>
+            <label for="driverId">ID del repartidor</label>
+            <input id="driverId" value="rep_334455">
+            <label for="orderId">ID del pedido</label>
+            <input id="orderId" placeholder="ord_...">
+            <p class="hint">Escribe el ID del pedido que muestra la vista del cliente.</p>
+        </section>
+        <section class="card">
+            <h2><span class="num">2</span> Ubicación <span class="dot" id="driverDot"></span></h2>
+            <div class="row" style="margin-top:0">
+                <button id="driverStart">Iniciar entrega</button>
+                <button id="driverStop" class="sec" disabled>Detener</button>
+            </div>
+            <p class="hint">Usa el GPS del navegador y envía la ubicación cada 5 s. Si no hay GPS, haz clic en el mapa para marcar tu posición.</p>
+        </section>
+        <section class="card">
+            <h2><span class="num">3</span> Estado del pedido</h2>
+            <div class="row" style="margin-top:0">
+                <button id="btnReady" class="sec">Pedido recogido (LISTO)</button>
+                <button id="btnDelivered">Marcar ENTREGADO</button>
+            </div>
+            <p class="hint">Al marcar ENTREGADO, el cliente recibe la notificación y se detiene el envío.</p>
+        </section>
+        <section class="card">
+            <h2>Pruebas de validación</h2>
+            <div class="row" style="margin-top:0">
+                <button class="sec" id="badJson">JSON inválido</button>
+                <button class="sec" id="badCoords">Latitud 999</button>
+            </div>
+        </section>
+    </aside>
+    <section>
+        <div id="map"></div>
+        <div class="card"><h2>Registro de peticiones</h2><div id="log"></div></div>
+    </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+
+    const $ = id => document.getElementById(id);
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+    const money = n => '$' + Number(n).toLocaleString('es-CO');
+
+    function log(kind, title, payload) {
+        const d = el('div', 'entry');
+        d.appendChild(el('span', kind, new Date().toLocaleTimeString() + '  ' + title));
+        if (payload !== undefined && payload !== null && payload !== '') {
+            let s = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+            if (s.length > 1200) s = s.slice(0, 1200) + '…';
+            d.appendChild(el('pre', null, s));
+        }
+        $('log').prepend(d);
+    }
+
+    async function api(method, url, body, quiet) {
+        const opt = { method, headers: {} };
+        if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+        let res;
+        try { res = await fetch(url, opt); }
+        catch (e) { if (!quiet) log('err', method + ' ' + url + ' → sin conexión con el servidor'); return null; }
+        const text = await res.text();
+        let json = null;
+        try { json = JSON.parse(text); } catch (e) {}
+        if (!quiet || !res.ok) log(res.ok ? 'ok' : 'err', method + ' ' + url + ' → ' + res.status, json || text);
+        return { ok: res.ok, status: res.status, json };
+    }
+
+    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/tracking';
+    const START = { lat: 4.60971, lng: -74.08175 }; // solo centra el mapa al abrir
+    const map = L.map('map').setView([START.lat, START.lng], 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+
+    let driverWs = null, driverTimer = null, geoWatch = null, pos = null, me = null;
+
+    const savedOrder = store('rapi_order'); if (savedOrder) $('orderId').value = savedOrder;
+    const orderId = () => $('orderId').value.trim();
+
+    function showMe() {
+        if (!pos) return;
+        const ll = [pos.lat, pos.lng];
+        if (!me) me = L.marker(ll).addTo(map); else me.setLatLng(ll);
+        map.panTo(ll);
+    }
+    function sendDriver(raw) {
+        if (driverWs && driverWs.readyState === WebSocket.OPEN) { driverWs.send(raw); log('ws', '→ envío al servidor', raw); }
+        else log('err', 'Primero pulsa «Iniciar entrega»');
+    }
+    function sendLocation() {
+        if (!pos) { log('err', 'Esperando tu ubicación: permite el GPS o haz clic en el mapa'); return; }
+        sendDriver(JSON.stringify({
+            deliveryPersonId: $('driverId').value.trim(), orderId: orderId(),
+            latitude: +pos.lat.toFixed(6), longitude: +pos.lng.toFixed(6), timestamp: new Date().toISOString()
+        }));
+    }
+
+    $('driverStart').onclick = () => {
+        if (!orderId()) { log('err', 'Escribe el ID del pedido'); return; }
+        $('current').textContent = 'Entrega del pedido ' + orderId();
+        pos = null;
+        driverWs = new WebSocket(WS_URL);
+        driverWs.onopen = () => {
+            $('driverDot').classList.add('on'); $('driverStart').disabled = true; $('driverStop').disabled = false;
+            if (navigator.geolocation) {
+                geoWatch = navigator.geolocation.watchPosition(
+                    p => { const first = !pos; pos = { lat: p.coords.latitude, lng: p.coords.longitude }; showMe(); if (first) sendLocation(); },
+                    err => log('err', 'GPS no disponible (' + err.message + '). Haz clic en el mapa para marcar tu posición.'),
+                    { enableHighAccuracy: true, maximumAge: 5000 });
+            } else {
+                log('err', 'Este navegador no tiene GPS. Haz clic en el mapa para marcar tu posición.');
+            }
+            driverTimer = setInterval(sendLocation, 5000);
+        };
+        driverWs.onmessage = e => log('err', 'el servidor responde', e.data);
+        driverWs.onclose = stopDriver;
+        driverWs.onerror = () => log('err', 'no se pudo conectar al servidor');
+    };
+    function stopDriver() {
+        clearInterval(driverTimer);
+        if (geoWatch !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatch);
+        geoWatch = null;
+        const ws = driverWs; driverWs = null;
+        if (ws) ws.close();
+        $('driverDot').classList.remove('on'); $('driverStart').disabled = false; $('driverStop').disabled = true;
+    }
+    $('driverStop').onclick = stopDriver;
+
+    map.on('click', e => {
+        if (!driverWs || driverWs.readyState !== WebSocket.OPEN) return;
+        pos = { lat: e.latlng.lat, lng: e.latlng.lng };
+        showMe(); sendLocation();
+    });
+
+    async function setStatus(status) {
+        if (!orderId()) { log('err', 'Escribe el ID del pedido'); return false; }
+        const r = await api('PATCH', '/api/orders/' + encodeURIComponent(orderId()) + '/status', { status });
+        return r && r.ok;
+    }
+    $('btnReady').onclick = () => setStatus('READY');
+    $('btnDelivered').onclick = async () => { if (await setStatus('DELIVERED')) stopDriver(); };
+
+    $('badJson').onclick = () => sendDriver('hola, esto no es JSON');
+    $('badCoords').onclick = () => sendDriver(JSON.stringify({
+        deliveryPersonId: $('driverId').value.trim(), orderId: orderId(), latitude: 999, longitude: -74.08
+    }));
+
+</script>
+</body>
+</html>
