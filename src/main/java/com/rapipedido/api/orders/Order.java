@@ -54,4 +54,6 @@ public class Order {
     public String getOrderStatus() { return orderStatus; }
     public Instant getCreatedAt() { return createdAt; }
     public List<OrderItem> getItems() { return items; }
+    public String getClientId() { return clientId; }
+    public void setOrderStatus(String orderStatus) { this.orderStatus = orderStatus; }
 }

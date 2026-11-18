@@ -4,6 +4,8 @@ import com.rapipedido.api.catalog.Dish;
 import com.rapipedido.api.catalog.DishRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.rapipedido.api.notification.OrderStatusChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -13,10 +15,13 @@ import java.util.UUID;
 public class OrderService {
     private final OrderRepository orderRepository;
     private final DishRepository dishRepository;
+    private final ApplicationEventPublisher events;
 
-    public OrderService(OrderRepository orderRepository, DishRepository dishRepository) {
+    public OrderService(OrderRepository orderRepository, DishRepository dishRepository,
+                        ApplicationEventPublisher events) {
         this.orderRepository = orderRepository;
         this.dishRepository = dishRepository;
+        this.events = events;
     }
 
     @Transactional
@@ -58,6 +63,8 @@ public class OrderService {
                 request.getPaymentMethod().trim(), total, "CREATED", Instant.now());
         validatedItems.forEach(order::addItem);
         Order saved = orderRepository.save(order);
+        events.publishEvent(new OrderStatusChangedEvent(
+                saved.getId(), request.getClientId().trim(), "CREATED"));
         return new OrderResponse(saved.getId(), saved.getTotalAmount(), saved.getOrderStatus(), saved.getCreatedAt());
     }
 
@@ -82,5 +89,21 @@ public class OrderService {
             throw new OrderValidationException("INVALID_QUANTITY", "La cantidad de cada producto debe ser mayor que cero");
         if (item.getUnitPrice() == null || !Double.isFinite(item.getUnitPrice()) || item.getUnitPrice() < 0)
             throw new OrderValidationException("INVALID_UNIT_PRICE", "El precio unitario debe ser mayor o igual que cero");
+    }
+
+    @Transactional
+    public OrderResponse updateStatus(String orderId, String newStatus) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderValidationException("ORDER_NOT_FOUND",
+                        "No existe el pedido " + orderId));
+        if (newStatus == null || !java.util.Set.of("READY", "DELIVERED").contains(newStatus.toUpperCase())) {
+            throw new OrderValidationException("INVALID_STATUS", "Estado no permitido: use READY o DELIVERED");
+        }
+        order.setOrderStatus(newStatus.toUpperCase());
+        Order saved = orderRepository.save(order);
+        events.publishEvent(new OrderStatusChangedEvent(
+                saved.getId(), saved.getClientId(), saved.getOrderStatus()));
+        return new OrderResponse(saved.getId(), saved.getTotalAmount(),
+                saved.getOrderStatus(), saved.getCreatedAt());
     }
 }

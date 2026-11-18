@@ -22,6 +22,12 @@ public class TrackingService {
     // orderId -> última ubicación conocida
     private final Map<String, LocationUpdate> lastLocations = new ConcurrentHashMap<>();
 
+    private final LocationStorage storage;
+
+    public TrackingService(LocationStorage storage) {
+        this.storage = storage;
+    }
+
     public void subscribe(String orderId, WebSocketSession session) {
         subscribers
                 .computeIfAbsent(orderId, k -> ConcurrentHashMap.newKeySet())
@@ -47,6 +53,8 @@ public class TrackingService {
     public void publish(LocationUpdate update) {
         // 1. Guardamos como "última ubicación" de ese pedido
         lastLocations.put(update.orderId(), update);
+        lastLocations.put(update.orderId(), update);
+        storage.save(update);
 
         // 2. Buscamos quién está suscrito a ese pedido
         Set<WebSocketSession> sessions = subscribers.get(update.orderId());
@@ -66,7 +74,7 @@ public class TrackingService {
     private void send(WebSocketSession session, String json) {
         try {
             session.sendMessage(new TextMessage(json));
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             System.out.println("No se pudo enviar a " + session.getId());
         }
     }
